@@ -108,7 +108,10 @@ class PointNetFeat(nn.Module):
         output = self.mlp1(output)  # [B, 3, N] -> [B, 64, N]
         # print(f"output.shape after mlp1: {output.shape}")
         if self.feature_transform:
-            output = self.stn64(output)  # [B, N, 64]
+            transform = self.stn64(output)   # transform matrix [B, 64, 64]
+            output = torch.matmul(transform.unsqueeze(
+                dim=1), pointcloud.unsqueeze(dim=3))  # matrix multiplication [B, N, 64, 64] * [B, N, 64, 1]
+        output = torch.transpose(output.squeeze(dim=-1), 1, 2)
         output = self.mlp2(output)  # [B, N, 1024]
         output = torch.max(output, 2, keepdim=False)  # [B, 1024]
         return output
@@ -154,7 +157,24 @@ class PointNetPartSeg(nn.Module):
 
         # returns the logits for m part labels each point (m = # of parts = 50).
         # TODO: Implement part segmentation model based on PointNet Architecture.
-        pass
+
+        self.stn3 = STNKd(k=3)
+        self.stn64 = STNKd(k=64)
+        self.mlp1 = nn.Sequential(
+            nn.Conv1d(3, 64, 1), nn.BatchNorm1d(64), nn.ReLU()
+        )
+        self.mlp2 = nn.Sequential(
+            nn.Conv1d(64, 128, 1), nn.BatchNorm1d(128), nn.ReLU(),
+            nn.Conv1d(128, 1024, 1), nn.BatchNorm1d(1024), nn.ReLU()
+        )
+        self.mlp3 = nn.Sequential(
+            nn.Conv1d(1088, 512, 1), nn.BatchNorm1d(512), nn.ReLU(),
+            nn.Conv1d(512, 256, 1), nn.BatchNorm1d(256), nn.ReLU(),
+            nn.Conv1d(256, 128, 1), nn.BatchNorm1d(128), nn.ReLU(),
+        )
+        self.mlp4 = nn.Sequential(
+            nn.Conv1d(128, m, 1), nn.BatchNorm1d(m), nn.ReLU()
+        )
 
     def forward(self, pointcloud):
         """
@@ -165,7 +185,26 @@ class PointNetPartSeg(nn.Module):
             - ...
         """
         # TODO: Implement forward function.
-        pass
+        transform = self.stn3(pointcloud)  # transform matrix [B, 3, 3]
+        output = torch.matmul(transform.unsqueeze(
+            dim=1), pointcloud.unsqueeze(dim=3))  # matrix multiplication [B, N, 3, 3] * [B, N, 3, 1]
+        # [B, N, 3, 1] -> [B, 3, N]
+        output = torch.transpose(output.squeeze(dim=-1), 1, 2)
+        output = self.mlp1(output)  # [B, 3, N] -> [B, 64, N]
+        transform = self.stn64(output)  # [B, N, 64]
+        output = torch.matmul(transform.unsqueeze(
+            dim=1), pointcloud.unsqueeze(dim=3))  # matrix multiplication [B, N, 3, 3] * [B, N, 3, 1]
+        # [B, N, 64, 1] -> [B, 64, N]
+        local_feature = torch.transpose(output.squeeze(dim=-1), 1, 2)
+        output = self.mlp2(local_feature)  # [B, N, 1024]
+        global_feature = torch.max(output, 2, keepdim=False)  # [B, 1024]
+        global_feature = global_feature.unsqueeze(
+            dim=-1).expand(-1, -1, local_feature.size(2))  # [B, 1024] -> [B, 1024, N]
+        feature = torch.cat((local_feature, global_feature), 1)
+        point_feature = self.mlp3(feature)  # [B, 128, N]
+        scores = self.mlp4(point_feature)  # [B, m, N]
+
+        return scores
 
 
 class PointNetAutoEncoder(nn.Module):

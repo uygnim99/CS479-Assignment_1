@@ -23,12 +23,14 @@ def step(points, pc_labels, class_labels, model):
         - logits [B, C, N] (C: num_class)
         - preds [B, N]
     """
-    
-    # TODO : Implement step function for segmentation.
 
-    loss = None
-    logits = None
-    preds = None
+    # TODO : Implement step function for segmentation.
+    logits = model(points)
+    preds = torch.argmax(logits, dim=1)
+    one_hot = F.one_hot(pc_labels, logits.size(dim=1))
+    lossFunc = torch.nn.CrossEntropyLoss()
+    logits, one_hot = output.type(torch.float32), one_hot.type(torch.float32)
+    loss = lossFunc(output, one_hot)
     return loss, logits, preds
 
 
@@ -40,6 +42,10 @@ def train_step(points, pc_labels, class_labels, model, optimizer, train_acc_metr
 
     # TODO : Implement backpropagation using optimizer and loss
 
+    optimizer.zero_grad()
+    loss.requires_grad_(True)
+    loss.backward()
+    optimizer.step()
     return loss, train_batch_acc
 
 
@@ -50,7 +56,8 @@ def validation_step(
         points, pc_labels, class_labels, model
     )
     val_batch_acc = val_acc_metric(preds, pc_labels)
-    val_batch_iou, masked_preds = val_iou_metric(logits, pc_labels, class_labels)
+    val_batch_iou, masked_preds = val_iou_metric(
+        logits, pc_labels, class_labels)
 
     return loss, masked_preds, val_batch_acc, val_batch_iou
 
@@ -74,7 +81,7 @@ def main(args):
             topk=2,
             verbose=True,
         )
-    
+
     # It will download Shapenet Dataset at the first time.
     (train_ds, val_ds, test_ds), (train_dl, val_dl, test_dl) = get_data_loaders(
         data_dir="./data", batch_size=args.batch_size, phases=["train", "val", "test"]
@@ -106,7 +113,8 @@ def main(args):
         with torch.no_grad():
             val_epoch_loss = []
             for points, pc_labels, class_labels in val_dl:
-                points, pc_labels, class_labels = points.to(device), pc_labels.to(device), class_labels.to(device)
+                points, pc_labels, class_labels = points.to(
+                    device), pc_labels.to(device), class_labels.to(device)
                 val_batch_loss, val_batch_masked_preds, val_batch_acc, val_batch_iou = validation_step(
                     points,
                     pc_labels,
@@ -126,7 +134,8 @@ def main(args):
 
             if args.save:
                 checkpoint_manager.update(
-                    model, epoch, round(val_epoch_iou.item() * 100, 2), f"Segmentation_ckpt"
+                    model, epoch, round(val_epoch_iou.item()
+                                        * 100, 2), f"Segmentation_ckpt"
                 )
         scheduler.step()
 
@@ -138,7 +147,8 @@ def main(args):
         test_acc_metric = Accuracy()
         test_iou_metric = mIoU()
         for points, pc_labels, class_labels in test_dl:
-            points, pc_labels, class_labels = points.to(device), pc_labels.to(device), class_labels.to(device)
+            points, pc_labels, class_labels = points.to(
+                device), pc_labels.to(device), class_labels.to(device)
             test_batch_loss, test_batch_masked_preds, test_batch_acc, test_batch_iou = validation_step(
                 points,
                 pc_labels,
@@ -150,12 +160,15 @@ def main(args):
         test_acc = test_acc_metric.compute_epoch()
         test_iou = test_iou_metric.compute_epoch()
 
-        print(f"test acc: {test_acc*100:.1f}% | test mIoU: {test_iou*100:.1f}%")
-        save_samples(points[4:8], pc_labels[4:8], test_batch_masked_preds[4:8], "segmentation_samples.png")
+        print(
+            f"test acc: {test_acc*100:.1f}% | test mIoU: {test_iou*100:.1f}%")
+        save_samples(points[4:8], pc_labels[4:8],
+                     test_batch_masked_preds[4:8], "segmentation_samples.png")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="PointNet ShapeNet Part Segmentation")
+    parser = argparse.ArgumentParser(
+        description="PointNet ShapeNet Part Segmentation")
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)
