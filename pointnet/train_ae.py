@@ -9,7 +9,6 @@ from utils.metrics import Accuracy
 from utils.model_checkpoint import CheckpointManager
 from pytorch3d.loss.chamfer import chamfer_distance
 
- 
 
 def step(points, model):
     """
@@ -20,12 +19,12 @@ def step(points, model):
         - preds [B, N, 3]
     """
 
-    # TODO : Implement step function for AutoEncoder. 
+    # TODO : Implement step function for AutoEncoder.
     # Hint : Use chamferDist defined in above
     # Hint : You can compute chamfer distance between two point cloud pc1 and pc2 by chamfer_distance(pc1, pc2)
-    
-    preds = None
-    loss = None
+
+    preds = model(points)
+    loss = chamfer_distance(points, preds)
 
     return loss, preds
 
@@ -34,7 +33,10 @@ def train_step(points, model, optimizer):
     loss, preds = step(points, model)
 
     # TODO : Implement backpropagation using optimizer and loss
-
+    optimizer.zero_grad()
+    loss.requires_grad_(True)
+    loss.backward()
+    optimizer.step()
     return loss, preds
 
 
@@ -77,7 +79,8 @@ def main(args):
         pbar = tqdm(train_dl)
         train_epoch_loss = []
         for points, _ in pbar:
-            train_batch_loss, train_batch_preds = train_step(points, model, optimizer)
+            train_batch_loss, train_batch_preds = train_step(
+                points, model, optimizer)
             train_epoch_loss.append(train_batch_loss)
             pbar.set_description(
                 f"{epoch+1}/{args.epochs} epoch | loss: {train_batch_loss:.4f}"
@@ -90,7 +93,8 @@ def main(args):
         with torch.no_grad():
             val_epoch_loss = []
             for points, _ in val_dl:
-                val_batch_loss, val_batch_preds = validation_step(points, model)
+                val_batch_loss, val_batch_preds = validation_step(
+                    points, model)
                 val_epoch_loss.append(val_batch_loss)
 
             val_epoch_loss = sum(val_epoch_loss) / len(val_epoch_loss)
@@ -99,7 +103,8 @@ def main(args):
             )
 
         if args.save:
-            checkpoint_manager.update(model, epoch, round(val_epoch_loss.item(), 4), f"AutoEncoding_ckpt")
+            checkpoint_manager.update(model, epoch, round(
+                val_epoch_loss.item(), 4), f"AutoEncoding_ckpt")
 
         scheduler.step()
 
@@ -117,7 +122,8 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="PointNet ModelNet40 AutoEncoder")
+    parser = argparse.ArgumentParser(
+        description="PointNet ModelNet40 AutoEncoder")
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)

@@ -197,7 +197,8 @@ class PointNetPartSeg(nn.Module):
         # [B, N, 64, 1] -> [B, 64, N]
         local_feature = torch.transpose(output.squeeze(dim=-1), 1, 2)
         output = self.mlp2(local_feature)  # [B, N, 1024]
-        global_feature = torch.max(output, 2, keepdim=False)  # [B, 1024]
+        global_feature, indices = torch.max(
+            output, 2, keepdim=False)  # [B, 1024]
         global_feature = global_feature.unsqueeze(
             dim=-1).expand(-1, -1, local_feature.size(2))  # [B, 1024] -> [B, 1024, N]
         feature = torch.cat((local_feature, global_feature), 1)
@@ -210,10 +211,20 @@ class PointNetPartSeg(nn.Module):
 class PointNetAutoEncoder(nn.Module):
     def __init__(self, num_points):
         super().__init__()
-        self.pointnet_feat = PointNetFeat()
+        self.pointnet_feat = PointNetFeat(False, False)
 
         # Decoder is just a simple MLP that outputs N x 3 (x,y,z) coordinates.
         # TODO : Implement decoder.
+        self.mlp_decoder = nn.Sequential(
+            nn.Conv1d(1024, num_points/4, 1),
+            nn.BatchNorm1d(num_points/4), nn.ReLU(),
+            nn.Conv1d(num_points/4, num_points/2, 1),
+            nn.BatchNorm1d(num_points/2), nn.ReLU(),
+            nn.Conv1d(num_points/2, num_points, 1),
+            nn.Dropout(), nn.BatchNorm1d(num_points), nn.ReLU(),
+            nn.Conv1d(num_points, num_points*3, 1),
+            nn.BatchNorm1d(num_points*3), nn.ReLU(),
+        )
 
     def forward(self, pointcloud):
         """
@@ -224,7 +235,9 @@ class PointNetAutoEncoder(nn.Module):
             - ...
         """
         # TODO : Implement forward function.
-        pass
+        values, indices = self.pointnet_feat(pointcloud)  # [B, 1024]
+        output = self.mlp_decoder(values.unsqueeze(dim=-1))  # [B, N*3, 1]
+        return torch.reshape(output.squeeze(), pointcloud.shape)  # [B, N, 3]
 
 
 def get_orthogonal_loss(feat_trans, reg_weight=1e-3):
