@@ -145,7 +145,7 @@ class PointNetCls(nn.Module):
         # print(f"indices.shape: {indices.shape}")
         output = self.mlp(values.unsqueeze(dim=-1))
         # print(f"output.shape: {output.shape}")
-        return output.squeeze()  # [B, num_classes]
+        return F.log_softmax(output.squeeze(), dim=1)  # [B, num_classes]
 
 
 class PointNetPartSeg(nn.Module):

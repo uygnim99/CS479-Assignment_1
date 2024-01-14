@@ -26,12 +26,13 @@ def step(points, labels, model):
     # print(f"labels.shape: {labels.shape}")
     output = model(points)   # [B, num_classes]
     preds = torch.argmax(output, dim=1)  # [B]
+    one_hot = F.one_hot(labels, output.size(dim=1))
     # print(f"output.shape: {output.shape}")
     # print(f"preds.shape: {preds.shape}")
-    # print(f"labels.type: {labels.dtype}, preds.type: {preds.dtype}")
-    lossFunc = torch.nn.MSELoss()
-    preds, labels = preds.type(torch.float64), labels.type(torch.float64)
-    loss = lossFunc(preds, labels)
+    # print(f"output.type: {output.dtype}, one_hot.type: {one_hot.dtype}")
+    lossFunc = torch.nn.CrossEntropyLoss()
+    output, one_hot = output.type(torch.float32), one_hot.type(torch.float32)
+    loss = lossFunc(output, one_hot)
     return loss, preds
 
 
