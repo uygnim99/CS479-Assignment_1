@@ -11,7 +11,8 @@ class STNKd(nn.Module):
         self.k = k
         self.conv1 = nn.Sequential(nn.Conv1d(k, 64, 1), nn.BatchNorm1d(64))
         self.conv2 = nn.Sequential(nn.Conv1d(64, 128, 1), nn.BatchNorm1d(128))
-        self.conv3 = nn.Sequential(nn.Conv1d(128, 1024, 1), nn.BatchNorm1d(1024))
+        self.conv3 = nn.Sequential(
+            nn.Conv1d(128, 1024, 1), nn.BatchNorm1d(1024))
 
         self.fc = nn.Sequential(
             nn.Linear(1024, 512),
@@ -36,7 +37,7 @@ class STNKd(nn.Module):
         x = torch.max(x, 2)[0]
 
         x = self.fc(x)
-        
+
         # Followed the original implementation to initialize a matrix as I.
         identity = (
             Variable(torch.eye(self.k, dtype=torch.float))
@@ -53,6 +54,7 @@ class PointNetFeat(nn.Module):
     """
     Corresponds to the part that extracts max-pooled features.
     """
+
     def __init__(
         self,
         input_transform: bool = False,
@@ -70,6 +72,15 @@ class PointNetFeat(nn.Module):
         # point-wise mlp
         # TODO : Implement point-wise mlp model based on PointNet Architecture.
 
+        self.mlp1 = nn.Sequential(
+            nn.Linear(3, 64), nn.BatchNorm1d(64), nn.ReLU()
+        )
+
+        self.mlp2 = nn.Sequential(
+            nn.Linear(64, 128), nn.BatchNorm1d(128), nn.ReLU(),
+            nn.Linear(128, 1024), nn.BatchNorm1d(1024), nn.ReLU()
+        )
+
     def forward(self, pointcloud):
         """
         Input:
@@ -80,19 +91,33 @@ class PointNetFeat(nn.Module):
         """
 
         # TODO : Implement forward function.
-        pass
+        if self.input_transform:
+            output = self.stn3(pointcloud)
+        else:
+            output = pointcloud
+        output = self.mlp1(output)  # [B, N, 64]
+        if self.feature_transform:
+            output = self.stn64(output)  # [B, N, 64]
+        output = self.mlp2(output)  # [B, N, 1024]
+        output = torch.max(output, 2, keepdim=False)  # [B, 1024]
+        return output
 
 
 class PointNetCls(nn.Module):
     def __init__(self, num_classes, input_transform, feature_transform):
         super().__init__()
         self.num_classes = num_classes
-        
+
         # extracts max-pooled features
         self.pointnet_feat = PointNetFeat(input_transform, feature_transform)
-        
+
         # returns the final logits from the max-pooled features.
         # TODO : Implement MLP that takes global feature as an input and return logits.
+        self.mlp = nn.Sequential(
+            nn.Linear(1024, 512), nn.BatchNorm1d(128), nn.ReLU(),
+            nn.Linear(512, 256), nn.BatchNorm1d(128), nn.ReLU(),
+            nn.Dropout(0.3), nn.Linear(256, num_classes)
+        )
 
     def forward(self, pointcloud):
         """
@@ -103,7 +128,9 @@ class PointNetCls(nn.Module):
             - ...
         """
         # TODO : Implement forward function.
-        pass
+        output = self.pointnet_feat(pointcloud)
+        output = self.mlp(output)
+        return output
 
 
 class PointNetPartSeg(nn.Module):

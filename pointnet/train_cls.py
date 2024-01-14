@@ -8,6 +8,8 @@ from dataloaders.modelnet import get_data_loaders
 from utils.metrics import Accuracy
 from utils.model_checkpoint import CheckpointManager
 
+from tqdm import tqdm
+
 
 def step(points, labels, model):
     """
@@ -18,11 +20,14 @@ def step(points, labels, model):
         - loss []
         - preds [B]
     """
-    
+
     # TODO : Implement step function for classification.
 
-    loss = None
-    preds = None
+    output = model(points)   # [B, num_classes]
+    preds = torch.argmax(output, dim=1)  # [B]
+    # one_hot = F.one_hot(labels) # [B, num_classes]
+    lossFunc = torch.nn.MSELoss()
+    loss = lossFunc(preds, labels)
     return loss, preds
 
 
@@ -31,6 +36,9 @@ def train_step(points, labels, model, optimizer, train_acc_metric):
     train_batch_acc = train_acc_metric(preds, labels.to(device))
 
     # TODO : Implement backpropagation using optimizer and loss
+
+    loss.backward()
+    optimizer.step()
 
     return loss, train_batch_acc
 
@@ -46,7 +54,8 @@ def main(args):
     global device
     device = "cpu" if args.gpu == -1 else f"cuda:{args.gpu}"
 
-    model = PointNetCls(num_classes=40, input_transform=True, feature_transform=True)
+    model = PointNetCls(num_classes=40, input_transform=True,
+                        feature_transform=True)
     model = model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -68,7 +77,7 @@ def main(args):
             # Whether to maximize or minimize metric.
             verbose=True,
         )
-    
+
     # It will download ModelNet dataset at the first time.
     (train_ds, val_ds, test_ds), (train_dl, val_dl, test_dl) = get_data_loaders(
         data_dir="./data", batch_size=args.batch_size, phases=["train", "val", "test"]
@@ -78,7 +87,7 @@ def main(args):
     val_acc_metric = Accuracy()
     test_acc_metric = Accuracy()
 
-    for epoch in range(args.epochs):
+    for epoch in tqdm(range(args.epochs)):
 
         # training step
         model.train()
@@ -119,7 +128,8 @@ def main(args):
             save ckpt only if the current metric is in topk.
             """
             checkpoint_manager.update(
-                model, epoch, round(val_epoch_acc.item() * 100, 2), f"Classification_ckpt"
+                model, epoch, round(val_epoch_acc.item() *
+                                    100, 2), f"Classification_ckpt"
             )
 
         scheduler.step()
@@ -139,7 +149,8 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="PointNet ModelNet40 Classification")
+    parser = argparse.ArgumentParser(
+        description="PointNet ModelNet40 Classification")
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)
