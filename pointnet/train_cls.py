@@ -22,11 +22,15 @@ def step(points, labels, model):
     """
 
     # TODO : Implement step function for classification.
-
+    # print(f"points.shape: {points.shape}")
+    # print(f"labels.shape: {labels.shape}")
     output = model(points)   # [B, num_classes]
     preds = torch.argmax(output, dim=1)  # [B]
-    # one_hot = F.one_hot(labels) # [B, num_classes]
+    # print(f"output.shape: {output.shape}")
+    # print(f"preds.shape: {preds.shape}")
+    # print(f"labels.type: {labels.dtype}, preds.type: {preds.dtype}")
     lossFunc = torch.nn.MSELoss()
+    preds, labels = preds.type(torch.float64), labels.type(torch.float64)
     loss = lossFunc(preds, labels)
     return loss, preds
 
@@ -36,7 +40,8 @@ def train_step(points, labels, model, optimizer, train_acc_metric):
     train_batch_acc = train_acc_metric(preds, labels.to(device))
 
     # TODO : Implement backpropagation using optimizer and loss
-
+    optimizer.zero_grad()
+    loss.requires_grad_(True)
     loss.backward()
     optimizer.step()
 
@@ -57,6 +62,8 @@ def main(args):
     model = PointNetCls(num_classes=40, input_transform=True,
                         feature_transform=True)
     model = model.to(device)
+
+    # print(model)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(
@@ -87,7 +94,7 @@ def main(args):
     val_acc_metric = Accuracy()
     test_acc_metric = Accuracy()
 
-    for epoch in tqdm(range(args.epochs)):
+    for epoch in range(args.epochs):
 
         # training step
         model.train()
@@ -95,7 +102,8 @@ def main(args):
         train_epoch_loss = []
         for points, labels in pbar:
             train_batch_loss, train_batch_acc = train_step(
-                points, labels, model, optimizer, train_acc_metric
+                points.to(device), labels.to(
+                    device), model, optimizer, train_acc_metric
             )
             train_epoch_loss.append(train_batch_loss)
             pbar.set_description(
