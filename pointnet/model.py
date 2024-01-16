@@ -110,7 +110,7 @@ class PointNetFeat(nn.Module):
         if self.feature_transform:
             transform = self.stn64(output)   # transform matrix [B, 64, 64]
             output = torch.matmul(transform.unsqueeze(
-                dim=1), pointcloud.unsqueeze(dim=3))  # matrix multiplication [B, N, 64, 64] * [B, N, 64, 1]
+                dim=1), output.unsqueeze(dim=3))  # matrix multiplication [B, 1, 64, 64] * [B, N, 64, 1]
         output = torch.transpose(output.squeeze(dim=-1), 1, 2)
         output = self.mlp2(output)  # [B, N, 1024]
         output = torch.max(output, 2, keepdim=False)  # [B, 1024]
@@ -191,9 +191,12 @@ class PointNetPartSeg(nn.Module):
         # [B, N, 3, 1] -> [B, 3, N]
         output = torch.transpose(output.squeeze(dim=-1), 1, 2)
         output = self.mlp1(output)  # [B, 3, N] -> [B, 64, N]
-        transform = self.stn64(output)  # [B, N, 64]
+        transform = self.stn64(output)  # [B, N, 64, 64]
+        # print(f"test: {transform.unsqueeze(dim=1).shape}")
+        # print(f"test: {output.unsqueeze(dim=3).shape}")
+        output = torch.transpose(output, 1, 2)
         output = torch.matmul(transform.unsqueeze(
-            dim=1), pointcloud.unsqueeze(dim=3))  # matrix multiplication [B, N, 3, 3] * [B, N, 3, 1]
+            dim=1), output.unsqueeze(dim=3))  # matrix multiplication [B, 1, 64, 64] * [B, N, 64, 1]
         # [B, N, 64, 1] -> [B, 64, N]
         local_feature = torch.transpose(output.squeeze(dim=-1), 1, 2)
         output = self.mlp2(local_feature)  # [B, N, 1024]

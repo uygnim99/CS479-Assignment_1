@@ -26,11 +26,14 @@ def step(points, pc_labels, class_labels, model):
 
     # TODO : Implement step function for segmentation.
     logits = model(points)
-    preds = torch.argmax(logits, dim=1)
+    # print(f"logits.shape: {logits.shape}")
+    logits = torch.transpose(logits, 1, 2)
+    preds = torch.argmax(logits, dim=2)
     one_hot = F.one_hot(pc_labels, logits.size(dim=1))
+    # print(f"one_hot.shape: {one_hot.shape}")
     lossFunc = torch.nn.CrossEntropyLoss()
-    logits, one_hot = output.type(torch.float32), one_hot.type(torch.float32)
-    loss = lossFunc(output, one_hot)
+    logits, one_hot = logits.type(torch.float32), one_hot.type(torch.float32)
+    loss = lossFunc(logits, one_hot)
     return loss, logits, preds
 
 
@@ -98,7 +101,8 @@ def main(args):
         train_epoch_loss = []
         for points, pc_labels, class_labels in pbar:
             train_batch_loss, train_batch_acc = train_step(
-                points, pc_labels, class_labels, model, optimizer, train_acc_metric
+                points.to(device), pc_labels.to(device), class_labels.to(
+                    device), model, optimizer, train_acc_metric
             )
             train_epoch_loss.append(train_batch_loss)
             pbar.set_description(
